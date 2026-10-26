@@ -77,7 +77,9 @@ services:
     image: agentgateway-authorizer:local
     user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
     environment: *authz-env
-    volumes: [./authorization/data:/data]
+    volumes:
+      - ./authorization/data:/data
+      - ./gateway/config.yaml:/config/gateway.yaml:ro
     ports: ['127.0.0.1:8080:8080']
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -86,10 +88,10 @@ services:
   agentgateway:
     build: gateway
     image: agentgateway-poc:local
-    command: [-f, /etc/agentgateway/config.yaml]
+    command: [-f, /etc/agentgateway/config.json]
     environment:
       AUTHZ_CHECK_TOKEN: ${AUTHZ_CHECK_TOKEN:?Run make env first}
-    volumes: ['./gateway/config.yaml:/etc/agentgateway/config.yaml:ro']
+    volumes: ['./authorization/data/gateway:/etc/agentgateway:ro']
     depends_on:
       authorizer: {condition: service_healthy, restart: true}
       mcp-finance: {condition: service_healthy, restart: true}

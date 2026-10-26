@@ -74,3 +74,58 @@ curl -fsS -X PATCH http://localhost:8080/admin/llm/models/advanced \
 ```
 
 Use `{"enabled":true}` to restore it. Unauthorized requests must produce no execution event at `http://localhost:9400/_lab/events`.
+
+
+## MCP registry administration
+
+Load `AUTHZ_ADMIN_TOKEN` as in the LLM administration example. Register a second reference to the example documents backend, then discover its tools:
+
+```bash
+curl -fsS -X PUT http://localhost:8080/admin/mcp/servers/documents-extra \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"endpoint":"http://mcp-documents:8000/mcp"}'
+
+curl -fsS -X POST http://localhost:8080/admin/mcp/servers/documents-extra/sync \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN"
+
+curl -fsS http://localhost:8080/admin/mcp \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN" | python3 -m json.tool
+```
+
+The tool catalog now contains `documents-extra` entries. They are not visible to callers until granted. Copy the numeric `id` of the desired entry into `TOOL_ID` below:
+
+```bash
+TOOL_ID=123 # Replace with an actual tool ID from the catalog.
+curl -fsS -X PUT http://localhost:8080/admin/mcp/groups/project-tools \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data "{\"tools\":[$TOOL_ID],\"principals\":[\"service-erp\",\"agent-b\"]}"
+```
+
+The selected tool becomes available to ERP and B after the gateway reloads. It appears with the prefix `documents-extra_`. The caller/agent intersection still applies. Disable the server to revoke access immediately:
+
+```bash
+curl -fsS -X PUT http://localhost:8080/admin/mcp/servers/documents-extra \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"endpoint":"http://mcp-documents:8000/mcp","enabled":false}'
+```
+
+Clean up the additional server and group assignments:
+
+```bash
+curl -fsS -X DELETE http://localhost:8080/admin/mcp/servers/documents-extra \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN"
+curl -fsS -X DELETE http://localhost:8080/admin/mcp/groups/project-tools \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN"
+```
+
+To retry a failed configuration publication, or publish edits to the fixed template:
+
+```bash
+curl -fsS -X POST http://localhost:8080/admin/mcp/apply \
+  -H "Authorization: Bearer $AUTHZ_ADMIN_TOKEN"
+```
+
+No container restart or manual edit of MCP targets is needed.

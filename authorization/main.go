@@ -57,6 +57,10 @@ func main() {
 		log.Fatal(err)
 	}
 	server := &Server{Store: store, Verifier: &Verifier{Issuer: required("OIDC_ISSUER"), Audience: required("OIDC_AUDIENCE"), JWKS: required("OIDC_JWKS_URL")}, Upstream: upstream, AdminToken: required("AUTHZ_ADMIN_TOKEN"), CheckToken: required("AUTHZ_CHECK_TOKEN")}
+	server.Registry = &MCPRegistry{Store: store, Template: env("GATEWAY_CONFIG_TEMPLATE", "/config/gateway.yaml"), Output: env("GATEWAY_CONFIG_OUTPUT", "/data/gateway/config.json")}
+	if err = server.Registry.Publish(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 	internal := http.NewServeMux()
 	internal.HandleFunc("POST /check", server.Check)
 	servers := []*http.Server{

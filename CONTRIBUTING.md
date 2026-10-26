@@ -17,6 +17,10 @@ make down
 
 The Go service and gateway configuration are the extension components. Agents, services, MCP servers, Keycloak realm and the local LLM provider are demonstration fixtures. Keep deployment-specific identities and credentials in those fixtures or local configuration.
 
+## Documentation
+
+Keep [architecture](docs/ARCHITECTURE.md), [database](docs/DATABASE.md) and [policy management](docs/POLICIES.md) aligned with the implementation. Describe fixture-specific deployment details in [the example environment](docs/EXAMPLE_ENVIRONMENT.md). Schema changes must update the documented columns and migration list; management API changes must update [CURLS.md](CURLS.md). Distinguish configured/tested behavior from features merely available in the gateway.
+
 ## Changes
 
 Explain the problem, the resulting behavior and the validation performed. Authorization changes should cover both discovery and invocation and confirm that denied requests do not execute a backend operation. Lifecycle changes should cover successful responses, upstream failures and cancellation.

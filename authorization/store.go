@@ -122,7 +122,7 @@ func (s *Store) Migrate(seedPath string) error {
 			}
 		}
 		for server, names := range seed.Tools {
-			run("INSERT INTO mcp_servers VALUES(?,?)", server, "http://mcp-"+server+":8000/mcp")
+			run("INSERT INTO mcp_servers(id,endpoint) VALUES(?,?)", server, "http://mcp-"+server+":8000/mcp")
 			for _, name := range names {
 				run("INSERT INTO tools(server_id,name) VALUES(?,?)", server, name)
 			}
@@ -241,10 +241,10 @@ func (s *Store) SeedActions(seedPath string) error {
 
 func (s *Store) Start() error {
 	var count int
-	if err := s.DB.QueryRow("SELECT count(*) FROM authz_schema_migrations WHERE version IN ('001_permissions.sql','002_contexts_llm.sql','003_actions.sql','seed-v1','seed-actions-v1')").Scan(&count); err != nil {
+	if err := s.DB.QueryRow("SELECT count(*) FROM authz_schema_migrations WHERE version IN ('001_permissions.sql','002_contexts_llm.sql','003_actions.sql','004_mcp_registry.sql','seed-v1','seed-actions-v1')").Scan(&count); err != nil {
 		return err
 	}
-	if count != 5 {
+	if count != 6 {
 		return fmt.Errorf("schema not current: run migrate")
 	}
 	_, err := s.DB.Exec("UPDATE delegation_contexts SET revoked_at=? WHERE revoked_at IS NULL", time.Now().Unix())
@@ -300,7 +300,7 @@ func canAgent(ctx context.Context, tx *sql.Tx, principal, agent string) (bool, e
 	return n > 0, err
 }
 func toolsFor(ctx context.Context, tx *sql.Tx, origin, actor string) (map[string][]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT t.server_id,t.name FROM tools t JOIN tool_group_members m ON m.tool_id=t.id JOIN tool_grants g ON g.group_id=m.group_id WHERE g.principal_id=? AND t.enabled=1 AND t.id IN (SELECT m.tool_id FROM tool_group_members m JOIN tool_grants g ON g.group_id=m.group_id WHERE g.principal_id=?) ORDER BY t.server_id,t.name`, origin, actor)
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT t.server_id,t.name FROM tools t JOIN mcp_servers srv ON srv.id=t.server_id JOIN tool_group_members m ON m.tool_id=t.id JOIN tool_grants g ON g.group_id=m.group_id WHERE g.principal_id=? AND t.enabled=1 AND t.available=1 AND srv.enabled=1 AND t.id IN (SELECT m.tool_id FROM tool_group_members m JOIN tool_grants g ON g.group_id=m.group_id WHERE g.principal_id=?) ORDER BY t.server_id,t.name`, origin, actor)
 	if err != nil {
 		return nil, err
 	}

@@ -263,3 +263,51 @@ async def test_origin_action_permission_is_checked_for_delegated_calls():
         finally:
             sql("INSERT INTO principal_actions VALUES('service-erp','llm.invoke')")
     assert await events('llm') == []
+
+
+async def test_registry_configures_gateway_without_restart():
+    """Discover a new upstream, grant tools, invoke through the reloaded gateway."""
+    from agents.common import mcp_session
+
+    async def tool_names():
+        async with mcp_session(headers('service-erp')) as session:
+            return {tool.name for tool in (await session.list_tools()).tools}
+
+    async with httpx.AsyncClient(timeout=25) as client:
+        assert (await client.get(BASE + '/admin/mcp')).status_code == 401
+        endpoint = BASE + '/admin/mcp/servers/registry-test'
+        group = BASE + '/admin/mcp/groups/registry-test'
+        try:
+            registered = await client.put(endpoint, headers=admin_headers(),
+                                          json={'endpoint': 'http://mcp-documents:8000/mcp'})
+            assert registered.status_code == 200, registered.text
+            synced = await client.post(endpoint + '/sync', headers=admin_headers())
+            assert synced.status_code == 200, synced.text
+            catalog = (await client.get(BASE + '/admin/mcp', headers=admin_headers())).json()
+            discovered = [t for t in catalog['tools'] if t['server_id'] == 'registry-test']
+            assert {t['name'] for t in discovered} == {'search_docs', 'read_doc'}
+            assert all(t['available'] == 1 and 'inputSchema' in t['definition'] for t in discovered)
+            assert not any(name.startswith('registry-test_') for name in await tool_names())
+            grant = await client.put(group, headers=admin_headers(),
+                                     json={'tools': [t['id'] for t in discovered], 'principals': ['service-erp']})
+            grant.raise_for_status()
+            for _ in range(100):
+                if 'registry-test_search_docs' in await tool_names():
+                    break
+                await asyncio.sleep(.1)
+            else:
+                raise AssertionError('agentgateway did not reload registry destinations')
+            async with mcp_session(headers('service-erp')) as session:
+                result = await session.call_tool('registry-test_search_docs', {'query': 'invoice'})
+                assert not result.isError
+            # The same grant is insufficient for an agent that has no membership.
+            async with held('service-erp', 'agent-b'):
+                result = await probe('agent-b', 'tools')
+                assert not any(name.startswith('registry-test_') for name in result['tools'])
+            disabled = await client.put(endpoint, headers=admin_headers(),
+                                        json={'endpoint': 'http://mcp-documents:8000/mcp', 'enabled': False})
+            disabled.raise_for_status()
+            assert not any(name.startswith('registry-test_') for name in await tool_names())
+        finally:
+            (await client.delete(group, headers=admin_headers())).raise_for_status()
+            (await client.delete(endpoint, headers=admin_headers())).raise_for_status()

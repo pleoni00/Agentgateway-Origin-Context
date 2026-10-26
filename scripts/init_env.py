@@ -3,7 +3,10 @@ import os
 from pathlib import Path
 import secrets
 
-path = Path(__file__).resolve().parents[1] / '.env'
+root = Path(__file__).resolve().parents[1]
+# Create as the invoking user before Docker binds this generated directory.
+(root / 'authorization/data/gateway').mkdir(parents=True, exist_ok=True)
+path = root / '.env'
 if not path.exists():
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as stream:

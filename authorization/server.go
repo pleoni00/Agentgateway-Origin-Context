@@ -44,6 +44,7 @@ type Decision struct {
 	Caller        string              `json:"caller"`
 }
 type Server struct {
+	Registry               *MCPRegistry
 	Store                  *Store
 	Verifier               *Verifier
 	Upstream               *url.URL

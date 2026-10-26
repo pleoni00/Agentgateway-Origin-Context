@@ -16,6 +16,10 @@ func (s *Server) Admin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/admin/mcp") {
+		s.AdminMCP(w, r)
+		return
+	}
 	if r.URL.Path == "/admin/llm" && r.Method == "GET" {
 		tx, err := s.Store.DB.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
 		if err != nil {

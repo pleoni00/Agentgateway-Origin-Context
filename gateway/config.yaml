@@ -1,3 +1,4 @@
+# Template: MCP targets are managed through the Go admin API.
 # Routing and enforcement only. Identity, context and grants are checked by the Go control plane.
 frontendPolicies:
   accessLog:
@@ -89,13 +90,7 @@ binds:
           - mcp.tool.target in extauthz.allowed_tools && mcp.tool.name in extauthz.allowed_tools[mcp.tool.target]
       backends:
       - mcp:
-          targets:
-          - name: finance
-            mcp:
-              host: http://mcp-finance:8000/mcp
-          - name: documents
-            mcp:
-              host: http://mcp-documents:8000/mcp
+          targets: [] # Populated from SQLite by the Go control plane.
         policies:
           requestHeaderModifier:
             remove:
