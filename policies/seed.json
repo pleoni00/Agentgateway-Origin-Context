@@ -1,0 +1,173 @@
+{
+  "principals": [
+    {
+      "id": "service-portal",
+      "kind": "service",
+      "role": "reader",
+      "domain": "finance"
+    },
+    {
+      "id": "service-erp",
+      "kind": "service",
+      "role": "approver",
+      "domain": "finance"
+    },
+    {
+      "id": "agent-a",
+      "kind": "agent",
+      "role": "orchestrator",
+      "domain": "general"
+    },
+    {
+      "id": "agent-b",
+      "kind": "agent",
+      "role": "finance",
+      "domain": "accounting"
+    },
+    {
+      "id": "agent-c",
+      "kind": "agent",
+      "role": "reporting",
+      "domain": "documents"
+    },
+    {
+      "id": "alice",
+      "kind": "user",
+      "role": "reader",
+      "domain": "documents"
+    },
+    {
+      "id": "observer",
+      "kind": "user",
+      "role": "reader",
+      "domain": "documents"
+    },
+    {
+      "id": "outsider",
+      "kind": "user",
+      "role": "reader",
+      "domain": "documents"
+    }
+  ],
+  "tools": {
+    "documents": [
+      "search_docs",
+      "read_doc"
+    ],
+    "finance": [
+      "get_invoice",
+      "approve_invoice"
+    ]
+  },
+  "tool_groups": {
+    "documents": [
+      "documents/search_docs",
+      "documents/read_doc"
+    ],
+    "finance-reader": [
+      "documents/search_docs",
+      "documents/read_doc",
+      "finance/get_invoice"
+    ],
+    "finance-approver": [
+      "documents/search_docs",
+      "documents/read_doc",
+      "finance/get_invoice",
+      "finance/approve_invoice"
+    ]
+  },
+  "tool_grants": {
+    "service-portal": [
+      "finance-reader"
+    ],
+    "service-erp": [
+      "finance-approver"
+    ],
+    "agent-a": [
+      "documents"
+    ],
+    "agent-b": [
+      "finance-approver"
+    ],
+    "agent-c": [
+      "documents"
+    ],
+    "alice": [
+      "documents"
+    ],
+    "observer": [
+      "documents"
+    ]
+  },
+  "agent_groups": {
+    "all-agents": [
+      "agent-a",
+      "agent-b",
+      "agent-c"
+    ],
+    "workers": [
+      "agent-b",
+      "agent-c"
+    ],
+    "documents-agent": [
+      "agent-c"
+    ],
+    "entry": [
+      "agent-a"
+    ]
+  },
+  "agent_grants": {
+    "service-portal": [
+      "all-agents"
+    ],
+    "service-erp": [
+      "all-agents"
+    ],
+    "agent-a": [
+      "workers"
+    ],
+    "agent-b": [
+      "documents-agent"
+    ],
+    "alice": [
+      "entry"
+    ]
+  },
+  "llm_groups": {
+    "standard": [
+      "standard"
+    ],
+    "advanced": [
+      "advanced"
+    ]
+  },
+  "llm_grants": {
+    "service-portal": [
+      "standard"
+    ],
+    "service-erp": [
+      "standard",
+      "advanced"
+    ],
+    "agent-a": [
+      "standard",
+      "advanced"
+    ],
+    "agent-b": [
+      "standard",
+      "advanced"
+    ],
+    "agent-c": [
+      "standard"
+    ],
+    "alice": [
+      "standard"
+    ]
+  },
+  "actions": {
+    "observer": [
+      "tools.read",
+      "llm.read"
+    ]
+  }
+}

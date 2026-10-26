@@ -1,0 +1,8 @@
+**
+!Dockerfile
+!go.mod
+!go.sum
+!*.go
+!migrations/
+!migrations/*.sql
+*_test.go

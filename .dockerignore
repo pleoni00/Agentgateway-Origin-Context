@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!requirements.lock
+!agents/
+!agents/*.py
+!services/
+!services/*.py
+!mcp_servers/
+!mcp_servers/*.py
+!llm_server/
+!llm_server/*.py

@@ -1,0 +1,152 @@
+# Routing and enforcement only. Identity, context and grants are checked by the Go control plane.
+frontendPolicies:
+  accessLog:
+    add:
+      workflow: '"x-workflow-id" in request.headers ? request.headers["x-workflow-id"] : ""'
+      origin: '"x-origin-service" in request.headers ? request.headers["x-origin-service"] : ""'
+      caller: '"x-caller" in request.headers ? request.headers["x-caller"] : ""'
+binds:
+- port: 8080
+  listeners:
+  - routes:
+    - matches:
+      - path:
+          exact: /health
+      policies:
+        directResponse:
+          status: 200
+          body: ok
+    - name: agent-a
+      matches:
+      - path:
+          pathPrefix: /a2a/agent-a
+      policies:
+        a2a: {}
+        urlRewrite:
+          path:
+            full: /
+        extAuthz: &authorize
+          host: authorizer:8000
+          failureMode:
+            denyWithStatus: 503
+          policies:
+            http:
+              requestTimeout: 2s
+            backendAuth:
+              key: $AUTHZ_CHECK_TOKEN
+          protocol:
+            http:
+              path: '"/check"'
+              addRequestHeaders:
+                :method: '"POST"'
+                content-type: '"application/json"'
+              body: |-
+                {
+                  "authorization": "authorization" in request.headers ? request.headers["authorization"] : "",
+                  "reference": "x-origin-context" in request.headers ? request.headers["x-origin-context"] : "",
+                  "workflow": "x-workflow-id" in request.headers ? request.headers["x-workflow-id"] : "",
+                  "path": request.path,
+                  "method": request.method,
+                  "rpc": request.method == "POST" ? json(request.body) : {}
+                }
+              metadata:
+                allowed_tools: json(response.body).allowed_tools
+                allowed_models: json(response.body).allowed_models
+      backends:
+      - host: agent-a:8000
+    - name: agent-b
+      matches:
+      - path:
+          pathPrefix: /a2a/agent-b
+      policies:
+        a2a: {}
+        urlRewrite:
+          path:
+            full: /
+        extAuthz: *authorize
+      backends:
+      - host: agent-b:8000
+    - name: agent-c
+      matches:
+      - path:
+          pathPrefix: /a2a/agent-c
+      policies:
+        a2a: {}
+        urlRewrite:
+          path:
+            full: /
+        extAuthz: *authorize
+      backends:
+      - host: agent-c:8000
+    - name: mcp
+      matches:
+      - path:
+          pathPrefix: /mcp
+      policies:
+        extAuthz: *authorize
+        mcpAuthorization:
+          rules:
+          - mcp.tool.target in extauthz.allowed_tools && mcp.tool.name in extauthz.allowed_tools[mcp.tool.target]
+      backends:
+      - mcp:
+          targets:
+          - name: finance
+            mcp:
+              host: http://mcp-finance:8000/mcp
+          - name: documents
+            mcp:
+              host: http://mcp-documents:8000/mcp
+        policies:
+          requestHeaderModifier:
+            remove:
+            - authorization
+            - x-origin-context
+llm:
+  port: 8081
+  policies:
+    extAuthz:
+      host: authorizer:8000
+      failureMode:
+        denyWithStatus: 503
+      policies:
+        http:
+          requestTimeout: 2s
+        backendAuth:
+          key: $AUTHZ_CHECK_TOKEN
+      protocol:
+        http:
+          path: '"/check"'
+          addRequestHeaders:
+            :method: '"POST"'
+            content-type: '"application/json"'
+          body: |-
+            {
+              "authorization": "authorization" in request.headers ? request.headers["authorization"] : "",
+              "reference": "x-origin-context" in request.headers ? request.headers["x-origin-context"] : "",
+              "workflow": "x-workflow-id" in request.headers ? request.headers["x-workflow-id"] : "",
+              "path": "/llm" + request.path,
+              "method": request.method,
+              "rpc": request.method == "POST" ? json(request.body) : {}
+            }
+          metadata:
+            allowed_tools: json(response.body).allowed_tools
+            allowed_models: json(response.body).allowed_models
+  models:
+  - name: standard
+    provider: openAI
+    params:
+      model: demo-standard
+      baseUrl: http://llm-server:8000/v1
+      apiKey: demo-provider-key
+    requestHeaders:
+      remove:
+      - x-origin-context
+  - name: advanced
+    provider: openAI
+    params:
+      model: demo-advanced
+      baseUrl: http://llm-server:8000/v1
+      apiKey: demo-provider-key
+    requestHeaders:
+      remove:
+      - x-origin-context

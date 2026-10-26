@@ -1,0 +1,105 @@
+name: agentgateway
+
+x-backend: &backend
+  build: .
+  image: agentgateway-poc-backend:local
+  init: true
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 3s
+    timeout: 3s
+    retries: 30
+  networks: [lab]
+x-agent-env: &agent-env
+  GATEWAY_URL: http://gateway:8080
+  KEYCLOAK_URL: http://keycloak:8080/realms/lab
+x-authz-env: &authz-env
+  AUTHZ_DATABASE: /data/permissions.db
+  SEED_FILE: /config/seed.json
+  OIDC_ISSUER: http://localhost:8180/realms/lab
+  OIDC_AUDIENCE: agentgateway-lab
+  OIDC_JWKS_URL: http://keycloak:8080/realms/lab/protocol/openid-connect/certs
+  AUTHZ_ADMIN_TOKEN: ${AUTHZ_ADMIN_TOKEN:?Run make env first}
+  AUTHZ_CHECK_TOKEN: ${AUTHZ_CHECK_TOKEN:?Run make env first}
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.2
+    command: [start-dev, --import-realm, --hostname=http://localhost:8180]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: Agentgateway-Lab-Admin-2026!
+    volumes:
+      - ./config/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - keycloak-data:/opt/keycloak/data
+    ports: ['127.0.0.1:8180:8080']
+    networks: [lab]
+  mcp-finance:
+    <<: *backend
+    command: [uvicorn, mcp_servers.finance:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:9101:8000']
+  mcp-documents:
+    <<: *backend
+    command: [uvicorn, mcp_servers.documents:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:9102:8000']
+  llm-server:
+    <<: *backend
+    command: [uvicorn, llm_server.app:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:9400:8000']
+  agent-a:
+    <<: *backend
+    environment: {<<: *agent-env, OAUTH_CLIENT_ID: agent-a, OAUTH_CLIENT_SECRET: agentgateway-lab-agent-a-secret}
+    command: [uvicorn, agents.agent_a:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:9201:8000']
+  agent-b:
+    <<: *backend
+    environment: {<<: *agent-env, OAUTH_CLIENT_ID: agent-b, OAUTH_CLIENT_SECRET: agentgateway-lab-agent-b-secret}
+    command: [uvicorn, agents.agent_b:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:9202:8000']
+  agent-c:
+    <<: *backend
+    environment: {<<: *agent-env, OAUTH_CLIENT_ID: agent-c, OAUTH_CLIENT_SECRET: agentgateway-lab-agent-c-secret}
+    command: [uvicorn, agents.agent_c:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:9203:8000']
+  migrate:
+    build: authorization
+    image: agentgateway-authorizer:local
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    command: [migrate]
+    environment: *authz-env
+    volumes:
+      - ./authorization/data:/data
+      - ./policies/seed.json:/config/seed.json:ro
+    networks: [lab]
+    healthcheck: {disable: true}
+  authorizer:
+    build: authorization
+    image: agentgateway-authorizer:local
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    environment: *authz-env
+    volumes: [./authorization/data:/data]
+    ports: ['127.0.0.1:8080:8080']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks:
+      lab: {aliases: [gateway]}
+  agentgateway:
+    build: gateway
+    image: agentgateway-poc:local
+    command: [-f, /etc/agentgateway/config.yaml]
+    environment:
+      AUTHZ_CHECK_TOKEN: ${AUTHZ_CHECK_TOKEN:?Run make env first}
+    volumes: ['./gateway/config.yaml:/etc/agentgateway/config.yaml:ro']
+    depends_on:
+      authorizer: {condition: service_healthy, restart: true}
+      mcp-finance: {condition: service_healthy, restart: true}
+      mcp-documents: {condition: service_healthy, restart: true}
+      llm-server: {condition: service_healthy, restart: true}
+      agent-a: {condition: service_healthy, restart: true}
+      agent-b: {condition: service_healthy, restart: true}
+      agent-c: {condition: service_healthy, restart: true}
+    networks: [lab]
+networks:
+  lab: {}
+volumes:
+  keycloak-data: {}
